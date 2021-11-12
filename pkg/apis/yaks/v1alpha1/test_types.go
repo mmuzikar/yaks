@@ -50,6 +50,7 @@ type TestSpec struct {
 	KubeDock  KubeDockSpec   `json:"kubedock,omitempty"`
 	Env       []string       `json:"env,omitempty"`
 	Secret    string         `json:"secret,omitempty"`
+	Dev       bool           `json:"dev,omitempty"`
 }
 
 // SourceSpec

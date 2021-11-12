@@ -20,8 +20,6 @@ package cmd
 import (
 	"context"
 	"fmt"
-	"github.com/citrusframework/yaks/pkg/install"
-	"gopkg.in/yaml.v2"
 	"io/ioutil"
 	"os"
 	"os/exec"
@@ -29,6 +27,9 @@ import (
 	r "runtime"
 	"strings"
 	"time"
+
+	"github.com/citrusframework/yaks/pkg/install"
+	"gopkg.in/yaml.v2"
 
 	"github.com/citrusframework/yaks/pkg/apis/yaks/v1alpha1"
 	"github.com/citrusframework/yaks/pkg/client"
@@ -39,6 +40,7 @@ import (
 	"github.com/citrusframework/yaks/pkg/util/openshift"
 	"github.com/google/uuid"
 	projectv1 "github.com/openshift/api/project/v1"
+	routev1 "github.com/openshift/api/route/v1"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 	corev1 "k8s.io/api/core/v1"
@@ -96,6 +98,7 @@ func newCmdRun(rootCmdOptions *RootCmdOptions) (*cobra.Command, *runCmdOptions) 
 	cmd.Flags().String("timeout", "", "Time to wait for individual test to complete")
 	cmd.Flags().BoolP("wait", "w", true, "Wait for the test to be complete")
 	cmd.Flags().Bool("logs", true, "Print test logs")
+	cmd.Flags().Bool("dev", false, "Opens a web UI for developing scenarios")
 
 	return &cmd, &options
 }
@@ -119,6 +122,7 @@ type runCmdOptions struct {
 	Timeout       string              `mapstructure:"timeout"`
 	Wait          bool                `mapstructure:"wait"`
 	Logs          bool                `mapstructure:"logs"`
+	Dev           bool                `mapstructure:"dev"`
 }
 
 func (o *runCmdOptions) validateArgs(_ *cobra.Command, args []string) error {
@@ -432,6 +436,10 @@ func (o *runCmdOptions) createAndRunTest(cmd *cobra.Command, c client.Client, ra
 		},
 	}
 
+	if o.Dev {
+		test.Spec.Dev = true
+	}
+
 	for _, resource := range runConfig.Config.Runtime.Resources {
 		data, err := loadData(resolvePath(runConfig, resource))
 		if err != nil {
@@ -557,40 +565,74 @@ func (o *runCmdOptions) createAndRunTest(cmd *cobra.Command, c client.Client, ra
 
 	ctx, cancel := context.WithCancel(o.Context)
 	var status = v1alpha1.TestPhaseNew
-	go func() {
-		var timeout string
-		if o.Timeout != "" {
-			timeout = o.Timeout
-		} else if runConfig.Config.Timeout != "" {
-			timeout = runConfig.Config.Timeout
-		} else {
-			timeout = config.DefaultTimeout
-		}
-
-		waitTimeout, parseErr := time.ParseDuration(timeout)
-		if parseErr != nil {
-			fmt.Println(fmt.Sprintf("Failed to parse test timeout setting - %s", parseErr.Error()))
-			waitTimeout, _ = time.ParseDuration(config.DefaultTimeout)
-		}
-
-		err = kubernetes.WaitCondition(o.Context, c, &test, func(obj interface{}) (bool, error) {
-			if val, ok := obj.(*v1alpha1.Test); ok {
-				if val.Status.Phase != v1alpha1.TestPhaseNone {
-					status = val.Status.Phase
-				}
-
-				if val.Status.Phase == v1alpha1.TestPhaseDeleting ||
-					val.Status.Phase == v1alpha1.TestPhaseError ||
-					val.Status.Phase == v1alpha1.TestPhasePassed ||
-					val.Status.Phase == v1alpha1.TestPhaseFailed {
-					return true, nil
-				}
+	if o.Dev {
+		go func() {
+			obj := routev1.Route{
+				TypeMeta: metav1.TypeMeta{
+					Kind:       "Route",
+					APIVersion: "route.openshift.io/v1",
+				},
 			}
-			return false, nil
-		}, waitTimeout)
+			waitTime := 0
 
-		cancel()
-	}()
+			for err := c.Get(ctx, ctrl.ObjectKey{
+				Namespace: test.Namespace,
+				Name:      test.Name,
+			}, &obj); err != nil; waitTime++ {
+				if waitTime > 1000 {
+					cancel()
+				}
+				if obj.Status.Size() > 0 && len(obj.Status.Ingress) > 0 {
+					break
+				}
+				if err != nil {
+					fmt.Printf("Error: %s", err)
+				}
+				time.Sleep(1 * time.Second)
+				fmt.Println("waiting a sec for the route to provision")
+			}
+			if err != nil {
+				fmt.Printf("Error: %s", err)
+			}
+			fmt.Printf("%v\n", obj)
+			fmt.Printf("Route is provisioned %s", obj.Status.Ingress[0].Host)
+		}()
+	} else {
+		go func() {
+			var timeout string
+			if o.Timeout != "" {
+				timeout = o.Timeout
+			} else if runConfig.Config.Timeout != "" {
+				timeout = runConfig.Config.Timeout
+			} else {
+				timeout = config.DefaultTimeout
+			}
+
+			waitTimeout, parseErr := time.ParseDuration(timeout)
+			if parseErr != nil {
+				fmt.Println(fmt.Sprintf("Failed to parse test timeout setting - %s", parseErr.Error()))
+				waitTimeout, _ = time.ParseDuration(config.DefaultTimeout)
+			}
+
+			err = kubernetes.WaitCondition(o.Context, c, &test, func(obj interface{}) (bool, error) {
+				if val, ok := obj.(*v1alpha1.Test); ok {
+					if val.Status.Phase != v1alpha1.TestPhaseNone {
+						status = val.Status.Phase
+					}
+
+					if val.Status.Phase == v1alpha1.TestPhaseDeleting ||
+						val.Status.Phase == v1alpha1.TestPhaseError ||
+						val.Status.Phase == v1alpha1.TestPhasePassed ||
+						val.Status.Phase == v1alpha1.TestPhaseFailed {
+						return true, nil
+					}
+				}
+				return false, nil
+			}, waitTimeout)
+
+			cancel()
+		}()
+	}
 
 	if o.Logs && o.Wait {
 		if err := k8slog.Print(ctx, c, namespace, name, cmd.OutOrStdout()); err != nil {

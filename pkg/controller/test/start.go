@@ -20,16 +20,19 @@ package test
 import (
 	"context"
 	"fmt"
+	"strings"
+
 	"github.com/citrusframework/yaks/pkg/util/envvar"
 	"github.com/citrusframework/yaks/pkg/util/openshift"
 	"k8s.io/apimachinery/pkg/api/resource"
-	"strings"
+	"k8s.io/apimachinery/pkg/util/intstr"
 
 	"github.com/citrusframework/yaks/pkg/apis/yaks/v1alpha1"
 	"github.com/citrusframework/yaks/pkg/config"
 	"github.com/citrusframework/yaks/pkg/install"
 	"github.com/citrusframework/yaks/pkg/util/kubernetes"
 	snap "github.com/container-tools/snap/pkg/api"
+	ocpv1 "github.com/openshift/api/route/v1"
 	batchv1 "k8s.io/api/batch/v1"
 	v1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
@@ -227,6 +230,49 @@ func (action *startAction) newTestJob(ctx context.Context, test *v1alpha1.Test, 
 
 	action.addSelenium(test, &job)
 	action.addKubeDock(test, &job)
+
+	if test.Spec.Dev {
+		job.Spec.Template.Spec.Containers[0].Command = append(job.Spec.Template.Spec.Containers[0].Command, "-Pinteractive")
+		svc := v1.Service{
+			Spec: v1.ServiceSpec{
+				Selector: map[string]string{
+					"yaks.citrusframework.org/test-id": job.GetObjectMeta().GetLabels()["yaks.citrusframework.org/test-id"],
+				},
+				Ports: []v1.ServicePort{
+					v1.ServicePort{
+						Protocol:   "TCP",
+						Port:       80,
+						TargetPort: intstr.FromInt(28319),
+					},
+				},
+			},
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      job.GetObjectMeta().GetName(),
+				Namespace: job.GetObjectMeta().GetNamespace(),
+			},
+		}
+
+		opts := metav1.CreateOptions{}
+		if svc, err := action.client.CoreV1().Services(test.Namespace).Create(context.TODO(), &svc, opts); err == nil {
+			err := action.client.Create(context.TODO(), &ocpv1.Route{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      job.GetObjectMeta().GetName(),
+					Namespace: job.GetObjectMeta().GetNamespace(),
+				},
+				Spec: ocpv1.RouteSpec{
+					To: ocpv1.RouteTargetReference{
+						Kind: "Service",
+						Name: svc.Name,
+					},
+				},
+			})
+			if err != nil {
+				Log.Error(err, "Couldn't create route :C")
+			}
+		} else {
+			Log.Error(err, "Couldn't create service :C")
+		}
+	}
 
 	return &job, nil
 }

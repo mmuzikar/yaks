@@ -80,6 +80,18 @@ rules:
   - list
   - watch
 - apiGroups:
+  - "route.openshift.io"
+  resources:
+  - "routes"
+  verbs:
+  - "get"
+  - "list"
+  - "watch"
+  - "create"
+  - "delete"
+  - "patch"
+  - "update"
+- apiGroups:
   - rbac.authorization.k8s.io
   resources:
   - roles

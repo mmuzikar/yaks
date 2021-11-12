@@ -19,10 +19,11 @@ package cmd
 
 import (
 	"context"
-	"github.com/pkg/errors"
-	"github.com/spf13/viper"
 	"os"
 	"strings"
+
+	"github.com/pkg/errors"
+	"github.com/spf13/viper"
 
 	"github.com/citrusframework/yaks/pkg/client"
 	"github.com/spf13/cobra"
@@ -82,6 +83,7 @@ func NewYaksCommand(ctx context.Context) (*cobra.Command, error) {
 	cmd.AddCommand(newCmdOperator())
 	cmd.AddCommand(cmdOnly(newCmdUpload(&options)))
 	cmd.AddCommand(cmdOnly(newCmdReport(&options)))
+	cmd.AddCommand(newCmdDev(&options))
 
 	if err := addHelpSubCommands(&cmd, &options); err != nil {
 		return &cmd, err
