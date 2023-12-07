@@ -28,6 +28,7 @@ import org.citrusframework.util.FileUtils;
 import io.cucumber.datatable.DataTable;
 import io.cucumber.java.en.Given;
 import io.cucumber.java.en.Then;
+import io.github.mmuzikar.interactive.cucumber.api.ExposeManager;
 
 import static org.citrusframework.actions.EchoAction.Builder.echo;
 import static org.citrusframework.actions.LoadPropertiesAction.Builder.load;
@@ -51,16 +52,17 @@ public class StandardSteps {
     @Given("^variable ([^\\s]+) (?:is|=) \"([^\"]*)\"$")
     public void variable(String name, String value) {
         runner.variable(name, value);
+        ExposeManager.expose(name, value);
     }
 
     @Given("^variable ([^\\s]+)=\"([^\"]*)\"$")
     public void variableDeclaration(String name, String value) {
-        runner.variable(name, value);
+        variable(name, value);
     }
 
     @Given("^variable ([^\\s]+) (?:is|=)$")
     public void variableMultiline(String name, String value) {
-        runner.variable(name, value);
+        variable(name, value);
     }
 
     @Given("^load variable ([^\\s]+)\\.([a-z0-9-]+)$")
@@ -86,7 +88,7 @@ public class StandardSteps {
     public void variables(DataTable dataTable) {
         Map<String, String> variables = dataTable.asMap(String.class, String.class);
         for (Map.Entry<String, String> entry : variables.entrySet()) {
-            runner.variable(entry.getKey(), entry.getValue());
+            variable(entry.getKey(), entry.getValue());
         }
     }
 

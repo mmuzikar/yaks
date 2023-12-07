@@ -135,6 +135,8 @@
     <versions-maven-plugin.version>2.7</versions-maven-plugin.version>
 
     <skip.gpg>false</skip.gpg>
+
+    <interactive-cucumber.version>1.0.0</interactive-cucumber.version>
   </properties>
 
   <dependencyManagement>

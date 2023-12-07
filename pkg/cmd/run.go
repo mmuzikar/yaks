@@ -44,12 +44,15 @@ import (
 
 	"github.com/google/uuid"
 	projectv1 "github.com/openshift/api/project/v1"
+	routev1 "github.com/openshift/api/route/v1"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 	"gopkg.in/yaml.v2"
 	corev1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/labels"
+	"k8s.io/apimachinery/pkg/selection"
 	ctrl "sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -99,6 +102,9 @@ func newCmdRun(rootCmdOptions *RootCmdOptions) (*cobra.Command, *runCmdOptions) 
 	cmd.Flags().BoolP("wait", "w", true, "Wait for the test to be complete")
 	cmd.Flags().Bool("logs", true, "Print test logs")
 
+	cmd.Flags().Bool("dev", false, "Open dev console")
+	cmd.Flags().String("yaks-settings", "", "Select custom YAKS config")
+
 	// Cucumber specific options
 	cmd.Flags().StringArrayP("feature", "f", nil, "Feature file to include in the test run")
 	cmd.Flags().StringArrayP("tag", "t", nil, "Specify a tag filter to only run tests that match given tag expression")
@@ -132,6 +138,8 @@ type runCmdOptions struct {
 	Timeout            string              `mapstructure:"timeout"`
 	Wait               bool                `mapstructure:"wait"`
 	Logs               bool                `mapstructure:"logs"`
+	Dev                bool                `mapstructure:"dev"`
+	YaksOptions        string              `mapstructure:"yaks-settings"`
 }
 
 func (o *runCmdOptions) validateArgs(_ *cobra.Command, args []string) error {
@@ -330,7 +338,9 @@ func (o *runCmdOptions) getRunConfig(source string) (*config.RunConfig, error) {
 		return config.NewWithDefaults(), nil
 	}
 
-	if isDir(source) {
+	if o.YaksOptions != "" {
+		configFile = o.YaksOptions
+	} else if isDir(source) {
 		// search for config file in given directory
 		configFile = path.Join(source, ConfigFile)
 	} else {
@@ -482,6 +492,7 @@ func (o *runCmdOptions) createTest(ctx context.Context, rawName string, runConfi
 }
 
 func (o *runCmdOptions) configureTest(ctx context.Context, namespace string, fileName string, name string, lang language.Language, data string, runConfig *config.RunConfig) (v1alpha1.Test, error) {
+	fmt.Println("Is interactive: %s", o.Dev)
 	test := v1alpha1.Test{
 		TypeMeta: metav1.TypeMeta{
 			Kind:       v1alpha1.TestKind,
@@ -492,6 +503,7 @@ func (o *runCmdOptions) configureTest(ctx context.Context, namespace string, fil
 			Name:      name,
 		},
 		Spec: v1alpha1.TestSpec{
+			Interactive: o.Dev,
 			Runtime: v1alpha1.RuntimeSpec{
 				Logger:  o.Logger,
 				Verbose: o.Verbose,
@@ -740,6 +752,10 @@ func (o *runCmdOptions) execute(ctx context.Context, c client.Client, cmd *cobra
 						status = val.Status.Phase
 					}
 
+					if test.Spec.Interactive && val.Status.Phase == v1alpha1.TestPhaseRunning {
+						return true, nil
+					}
+
 					if val.Status.Phase == v1alpha1.TestPhaseDeleting ||
 						val.Status.Phase == v1alpha1.TestPhaseError ||
 						val.Status.Phase == v1alpha1.TestPhasePassed ||
@@ -749,6 +765,32 @@ func (o *runCmdOptions) execute(ctx context.Context, c client.Client, cmd *cobra
 				}
 				return false, nil
 			}, waitTimeout)
+
+			isOCP, _ := openshift.IsOpenShift(c)
+			if test.Spec.Interactive && isOCP {
+				routeList := routev1.RouteList{}
+				fmt.Println("Looking for test-id: ", test.Status.TestID)
+				req, err := labels.NewRequirement(v1alpha1.TestIDLabel, selection.Equals, []string{test.Status.TestID})
+				if err != nil {
+					fmt.Println("Error: ")
+					fmt.Println(err)
+
+				}
+				selector := labels.NewSelector().Add(*req)
+
+				if err := c.List(ctx, &routeList, ctrl.InNamespace(namespace), &ctrl.ListOptions{
+					LabelSelector: selector,
+				}); err != nil {
+					fmt.Println("Something failed whilst listing routes")
+					fmt.Println(err.Error())
+				}
+
+				fmt.Println("=== Related links ===")
+				for _, r := range routeList.Items {
+					fmt.Printf("%s - %s\n", r.Name, r.Status.Ingress[0].Host)
+				}
+
+			}
 
 			cancel()
 		}()

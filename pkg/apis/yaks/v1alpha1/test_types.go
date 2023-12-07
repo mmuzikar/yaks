@@ -45,14 +45,15 @@ type TestSpec struct {
 	// Important: Run "operator-sdk generate k8s" to regenerate code after modifying this file
 	// Add custom validation using kubebuilder tags: https://book-v1.book.kubebuilder.io/beyond_basics/generating_crd.html
 
-	Runtime   RuntimeSpec    `json:"runtime,omitempty"`
-	Source    SourceSpec     `json:"source,omitempty"`
-	Resources []ResourceSpec `json:"resources,omitempty"`
-	Settings  SettingsSpec   `json:"config,omitempty"`
-	Selenium  SeleniumSpec   `json:"selenium,omitempty"`
-	KubeDock  KubeDockSpec   `json:"kubedock,omitempty"`
-	Env       []string       `json:"env,omitempty"`
-	Secret    string         `json:"secret,omitempty"`
+	Runtime     RuntimeSpec    `json:"runtime,omitempty"`
+	Source      SourceSpec     `json:"source,omitempty"`
+	Resources   []ResourceSpec `json:"resources,omitempty"`
+	Settings    SettingsSpec   `json:"config,omitempty"`
+	Selenium    SeleniumSpec   `json:"selenium,omitempty"`
+	KubeDock    KubeDockSpec   `json:"kubedock,omitempty"`
+	Env         []string       `json:"env,omitempty"`
+	Secret      string         `json:"secret,omitempty"`
+	Interactive bool           `json:"interactive,omitempty"`
 }
 
 // RuntimeSpec --.

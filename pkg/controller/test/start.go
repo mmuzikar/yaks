@@ -46,6 +46,7 @@ import (
 const (
 	RunAsUser         = 1001 // non-root user must match id used in Dockerfile
 	SeleniumNoVNCPort = 7900 // Default NoVNC port exposed as service when enabled
+	InteractivePort   = 5115
 )
 
 // NewStartAction creates a new start action.
@@ -247,6 +248,7 @@ func (action *startAction) newTestResources(ctx context.Context, test *v1alpha1.
 	addLogger(test, &job)
 
 	seResources := addSelenium(test, &job, clusterType)
+	resources = append(resources, addInteractive(test, &job, clusterType)...)
 	resources = append(resources, seResources...)
 
 	addKubeDock(test, &job)
@@ -254,6 +256,101 @@ func (action *startAction) newTestResources(ctx context.Context, test *v1alpha1.
 	setPodSecurityContext(&job)
 
 	return resources, nil
+}
+
+func addInteractive(test *v1alpha1.Test, job *batchv1.Job, clusterType v1alpha1.ClusterType) []ctrl.Object {
+	if clusterType == v1alpha1.ClusterTypeKubernetes {
+		return []ctrl.Object{}
+	}
+
+	resources := []ctrl.Object{}
+
+	job.ObjectMeta.Labels["app.kubernetes.io/part-of"] = test.Name
+
+	job.Spec.Template.Spec.Containers[0].Ports = []v1.ContainerPort{
+		{
+			Name:          "interactive-ui",
+			ContainerPort: InteractivePort,
+		},
+	}
+
+	serviceName := strings.Join([]string{ResourceNameFor(test), "interactive-console"}, "-")
+	controller := true
+	blockOwnerDeletion := true
+	service := v1.Service{
+		ObjectMeta: metav1.ObjectMeta{
+			Namespace: test.Namespace,
+			Name:      serviceName,
+			Labels: map[string]string{
+				"app":                       "yaks",
+				v1alpha1.TestLabel:          test.Name,
+				v1alpha1.TestIDLabel:        test.Status.TestID,
+				"app.kubernetes.io/part-of": test.Name,
+			},
+			OwnerReferences: []metav1.OwnerReference{
+				{
+					APIVersion:         test.APIVersion,
+					Kind:               test.Kind,
+					Name:               test.Name,
+					UID:                test.UID,
+					Controller:         &controller,
+					BlockOwnerDeletion: &blockOwnerDeletion,
+				},
+			},
+		},
+		Spec: v1.ServiceSpec{
+			Type:     v1.ServiceTypeNodePort,
+			Selector: map[string]string{v1alpha1.TestIDLabel: test.Status.TestID},
+			Ports: []v1.ServicePort{
+				{
+					Name:       "interactive-ui",
+					Port:       80,
+					TargetPort: intstr.FromInt(InteractivePort),
+				},
+			},
+		},
+	}
+
+	resources = append(resources, &service)
+
+	if clusterType == v1alpha1.ClusterTypeOpenShift {
+		route := routev1.Route{
+			ObjectMeta: metav1.ObjectMeta{
+				Namespace: test.Namespace,
+				Name:      serviceName,
+				Labels: map[string]string{
+					"app":                       "yaks",
+					v1alpha1.TestLabel:          test.Name,
+					v1alpha1.TestIDLabel:        test.Status.TestID,
+					"app.kubernetes.io/part-of": test.Name,
+				},
+				OwnerReferences: []metav1.OwnerReference{
+					{
+						APIVersion:         test.APIVersion,
+						Kind:               test.Kind,
+						Name:               test.Name,
+						UID:                test.UID,
+						Controller:         &controller,
+						BlockOwnerDeletion: &blockOwnerDeletion,
+					},
+				},
+			},
+			Spec: routev1.RouteSpec{
+				To: routev1.RouteTargetReference{
+					Kind: "Service",
+					Name: serviceName,
+				},
+				Port: &routev1.RoutePort{
+					TargetPort: intstr.FromString("interactive-ui"),
+				},
+			},
+		}
+
+		resources = append(resources, &route)
+	}
+
+	return resources
+
 }
 
 func setPodSecurityContext(job *batchv1.Job) {
@@ -334,6 +431,17 @@ func getMavenArgLine(test *v1alpha1.Test) []string {
 
 	// add system property settings
 	argLine = append(argLine, "-Dmaven.repo.local=/deployments/artifacts/m2")
+
+	if test.Spec.Interactive {
+		argLine = append(argLine, "-Pinteractive")
+	}
+
+	for _, rs := range test.Spec.Resources {
+		if rs.Name == "test.properties" {
+			argLine = append(argLine, "-Plocal-test-properties")
+			break
+		}
+	}
 
 	return argLine
 }

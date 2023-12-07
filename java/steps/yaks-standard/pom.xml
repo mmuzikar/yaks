@@ -51,6 +51,11 @@
       <groupId>com.fasterxml.jackson.core</groupId>
       <artifactId>jackson-databind</artifactId>
     </dependency>
+    <dependency>
+      <groupId>io.github.mmuzikar</groupId>
+      <artifactId>interactive-cucumber-api</artifactId>
+      <version>${interactive-cucumber.version}</version>
+    </dependency>
 
     <!-- Test scope -->
     <dependency>

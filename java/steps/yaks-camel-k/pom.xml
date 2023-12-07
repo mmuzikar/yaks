@@ -58,6 +58,12 @@
     </dependency>
 
     <dependency>
+      <groupId>io.github.mmuzikar</groupId>
+      <artifactId>interactive-cucumber-api</artifactId>
+      <version>${interactive-cucumber.version}</version>
+    </dependency>
+
+    <dependency>
       <groupId>org.citrusframework</groupId>
       <artifactId>citrus-base</artifactId>
     </dependency>

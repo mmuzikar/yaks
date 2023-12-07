@@ -39,6 +39,8 @@ import org.citrusframework.exceptions.CitrusRuntimeException;
 import org.citrusframework.spi.Resource;
 import org.citrusframework.util.FileUtils;
 import org.citrusframework.yaks.camelk.actions.integration.CreateIntegrationAction;
+import org.citrusframework.yaks.camelk.suggestions.IntegrationNameSuggestionProvider;
+import io.github.mmuzikar.interactive.cucumber.api.Suggestion;
 import org.citrusframework.yaks.kubernetes.KubernetesSupport;
 
 import static org.citrusframework.actions.CreateVariablesAction.Builder.createVariable;
@@ -202,7 +204,7 @@ public class CamelKSteps {
 	}
 
     @Given("^delete Camel K integration ([a-z0-9-]+)$")
-	public void deleteIntegration(String name) {
+	public void deleteIntegration(@Suggestion(IntegrationNameSuggestionProvider.class) String name) {
         runner.run(camelk()
                     .client(k8sClient)
                     .deleteIntegration(name));
@@ -211,7 +213,7 @@ public class CamelKSteps {
     @Given("^wait for Camel K integration ([a-z0-9-]+)$")
     @Given("^Camel K integration ([a-z0-9-]+) is running$")
     @Then("^Camel K integration ([a-z0-9-]+) should be running$")
-    public void integrationShouldBeRunning(String name) {
+    public void integrationShouldBeRunning(@Suggestion(IntegrationNameSuggestionProvider.class) String name) {
         runner.run(camelk()
                 .client(k8sClient)
                 .verifyIntegration(name)
@@ -222,7 +224,7 @@ public class CamelKSteps {
 
     @Given("^Camel K integration ([a-z0-9-]+) is stopped")
     @Then("^Camel K integration ([a-z0-9-]+) should be stopped")
-    public void integrationShouldBeStopped(String name) {
+    public void integrationShouldBeStopped(@Suggestion(IntegrationNameSuggestionProvider.class) String name) {
         runner.run(camelk()
                 .client(k8sClient)
                 .verifyIntegration(name)
@@ -232,12 +234,12 @@ public class CamelKSteps {
     }
 
     @Then("^Camel K integration ([a-z0-9-]+) should print (.*)$")
-    public void integrationShouldPrint(String name, String message) {
+    public void integrationShouldPrint(@Suggestion(IntegrationNameSuggestionProvider.class) String name, String message) {
         integrationShouldPrintMultiline(name, message);
     }
 
     @Then("^Camel K integration ([a-z0-9-]+) should print$")
-    public void integrationShouldPrintMultiline(String name, String message) {
+    public void integrationShouldPrintMultiline(@Suggestion(IntegrationNameSuggestionProvider.class) String name, String message) {
         runner.run(camelk()
                 .client(k8sClient)
                 .verifyIntegration(name)
@@ -248,12 +250,12 @@ public class CamelKSteps {
     }
 
     @Then("^Camel K integration ([a-z0-9-]+) should not print (.*)$")
-    public void integrationShouldNotPrint(String name, String message) {
+    public void integrationShouldNotPrint(@Suggestion(IntegrationNameSuggestionProvider.class) String name, String message) {
         integrationShouldNotPrintMultiline(name, message);
     }
 
     @Then("^Camel K integration ([a-z0-9-]+) should not print$")
-    public void integrationShouldNotPrintMultiline(String name, String message) {
+    public void integrationShouldNotPrintMultiline(@Suggestion(IntegrationNameSuggestionProvider.class) String name, String message) {
         runner.run(assertException()
                 .exception(ActionTimeoutException.class)
                 .when(camelk()

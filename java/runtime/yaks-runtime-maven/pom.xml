@@ -73,6 +73,11 @@
       <artifactId>cucumber-junit</artifactId>
       <scope>test</scope>
     </dependency>
+    <dependency>
+      <groupId>io.github.mmuzikar</groupId>
+      <artifactId>lsp</artifactId>
+      <version>${interactive-cucumber.version}</version>
+    </dependency>
   </dependencies>
 
   <build>
@@ -239,5 +244,35 @@
         </pluginManagement>
       </build>
     </profile>
+    <profile>
+      <id>interactive</id>
+      <build>
+          <plugins>
+              <plugin>
+                  <groupId>org.apache.maven.plugins</groupId>
+                  <artifactId>maven-failsafe-plugin</artifactId>
+                  <configuration combine.self="append">
+                      <argLine>
+                          -javaagent:${settings.localRepository}/io/github/mmuzikar/lsp/${interactive-cucumber.version}/lsp-${interactive-cucumber.version}.jar
+                      </argLine>
+                  </configuration>
+              </plugin>
+          </plugins>
+      </build>
+  </profile>
+  <profile>
+      <id>local-test-properties</id>
+      <build>
+          <plugins>
+              <plugin>
+                  <groupId>org.apache.maven.plugins</groupId>
+                  <artifactId>maven-failsafe-plugin</artifactId>
+                  <configuration combine.self="append">
+                      <systemPropertiesFile>/deployments/data/yaks-runtime-maven/target/test-classes/test.properties</systemPropertiesFile>
+                  </configuration>
+              </plugin>
+          </plugins>
+      </build>
+  </profile>
   </profiles>
 </project>
